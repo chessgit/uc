@@ -1,0 +1,195 @@
+1.
+多线程threads
+一个进程内部有多个任务并发进行
+#include <pthread.h>
+需要链接一个库：pthread -> gcc -lpthread
+步骤：1.创建线程  2.等待进程+取得线程返回值 3.终止线程
+创建：       int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+                          void *(*start_routine) (void *), void *arg);
+
+等待线程结束+拿到返回值：
+	void *v;
+	pthread_join(threadid,&v);
+
+终止线程：
+	pthread_cancel(id);他杀
+	pthread_exit(void*ret)自杀
+	pthread_setcancelstate(int state,int *oldstate);自卫
+	
+
+如果不关心线程的返回值，只要他执行操作则：
+分离线程：pthread_detach(threadid)
+	让一个线程结束后直接丢弃线程信息，不等待其他线程pthread_join它，其实就是立刻回收资源。
+2.
+多线程一起跑，往往需要控制他们的执行顺序，线程同步（重点）：互斥量mutex,posix信号量，条件变量
+
+互斥量mutex:创建，销毁，加锁，解锁,看是否加锁了避免等待
+	#include<pthread.h>
+	pthread_mutex_init
+	pthread_mutex_destory(&m);
+	pthread_mutex_lock(&m);//对互斥量加锁，如果加了就等待，直到unlock 在加
+	pthread_mutex_unlock(&m)//哪个加锁哪个解，别的线程不能解 
+	pthread_mutex_trylock(&m)
+
+	初始化：
+	1.pthread_mutex_t m=PTHREAD_MUTEX_INITIALIZER;//直接初始
+	2.pthread_mutex_init(&m,NULL);
+
+	使用场景：在临界资源访问
+	案例：
+
+
+posix 信号量:
+ 	#include <semaphore.h>
+	sem_t s;
+	sem_init(&s,0,n)//信号量value=n;
+	sem_wait(&s);//信号量减一，直到够减为止
+	sem_post(&s);//加一
+	sem_destory(&s);
+	使用场景：多个线程同步，数量
+
+条件变量condition：多个线程等待某个条件满足，在条件达到时，由一个线程取通知等待的线程。
+	pthread_cond_t c
+	pthread_cond_init(&c,NULL)
+	pthread_cond_destory(&c)
+	pthread_cond_signal(&c)//通知一个在等待的线程，多个等待，看运气，没有等待，通知作废不保留
+	pthread_cond_broadcast(&c)//通知所有在等待的线程
+	pthread_cond_wait(&c...)在一个条件变量上等待通知。条件变量总跟一个互斥量一起使用，在wait前加锁，wait自动解锁进入等待状态，得到信号后又加锁
+	pthread_mutex_t m=PTHREAD_MUTEX_INITIALIZER;
+	pthread_mutex_lock(&m);
+	pthread_cond_wait()
+
+	pthread_cond_waittime//限时等待
+	pthread_cond_timewait
+
+3.
+区别：
+
+多进程：适合粗粒度（coarse——grained）的多任务分块
+	占用资源多，每个进程有自己的进程空间、进程id、进程状态（进程控制块PCB）、内存是独立的
+	通信IPC：
+多线程：适合细粒度的（fine——grained）的多任务分块
+	占用资源少，每个线程有自己的栈空间、内存共用，对关键共用资源要考虑同步，轻量级，尽量用多线程
+	线程是cpu调度的基本单位。（多cpu性能就能发挥出来）
+
+4.
+网络通信：协议（网络通信的约定）、
+
+协议（protocol）模型：
+	OSI模型（开放系统互连）：
+	物理层，物理设备协议
+	数据链路层，MAC（寻址收发通信目标）、传送方式：广播（小网络）
+	网络层，ip地址寻址（跨越网络）
+	传输层，TCP、UDP（传输控制）
+	会话层，连接控制
+	表示层，数据表示格式（跨国界不同类型系统，字节顺序）
+	应用层，ftp21，http80，telnet23，pop3,smtp...
+
+实际使用模型：TCP/IP网络模型（不安全）老美：arpa计划
+		物理层数据链路层：硬件驱动
+		网络层：互联网
+		传输层：传输层
+		应用层：会话层，表示层，应用层
+
+每个操作系统都提供网络接口：套接字socket
+
+字节顺序问题：小端（先放位数小的）、大端，所以统一顺序：网络字节顺序（大端）
+	本机字节顺序->网络字节顺序->它机字节顺序
+	ox12345678  小端：78（1字节） 56 34 12 
+
+	如linux小端，unix大端
+	函数：
+	#include <arpa/inet.h>
+	hton(host to network)
+	htons(unsigned short)传2字节数据，转成大端数据，但字符串不用
+	htonl(unsigned long) 传4字节数据
+
+	ntohs(unsigned short)传2字节数据
+	ntohl(unsigned long) 传4字节数据
+
+IP
+	ipv4（4字节） ipv6（16字节）
+	子网掩码：按位与，相同的ip属于同一个子网。
+	 A：第一个0（1～127）
+		127.x.x.x表示本机
+	 B：10（128～191）
+	 C：110（192～223）
+	 D：1110
+	 E：1111
+	局域网:10.x.x.x 172.x.x.x 192.x.x.x
+	主机地址全0表示网络，全1表示广播地址
+
+	ip地址表示格式：
+		内部格式：long ip;//给计算机
+		点分十进制：char ip[16];//给人看
+	转换函数：
+	#include <arpa/inet.h>
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+		inet_pton(1,2,3)//point to neibu
+			1:指明ipv4或ipv6 AF_INET,AF_INET6 2：点分十进制格式地址 3:内部格式ip地址
+		inet_ntop（1,3,2,4）
+			4：3的buf，存的字符串的大小
+		in_addr_t(ip32) inet_addr(str)//ipv4
+		inet_aton(str,in_addr*) //ipv4的点分传换成内部格式，存在结构中
+		char* inet_ntoa(in_addr)
+
+		eg:
+		inet_pton(AF_INET,str,&ip32)
+		inet_ntop(AF_INET,&ip32,str,strlen(str)+1)
+
+	typedef uint32_t in_addr_t;
+	struct in_addr{//ip内部格式
+		in_addr_t s_addr;
+	}
+
+5.
+网络通信程序框架（TCP传输控制协议）
+	三次握手建立连接（C/S模型）：
+	客户端client		服务器server
+	syn(num)//请求---------->	
+		<----------------ack(num+1)/*应答*/ syn(k)//请求，问对不对
+	ack(k+1)---------------->
+
+	TCP传输保证数据能正确的送达目的地，要么返回一个失败的信息。
+
+代码框架：
+	socket当文件描述符
+	1）服务器：				2）客户端
+	话机：socket				话机：socket
+	绑定号码：bind
+	多路分机：listen	
+	等待：accept				拨打：connect
+	接通（转到分机）：新socket
+	总机继续等别的电话，分机跟用户通信
+	分机通信：反复write/read		反复read/write
+	挂断分机：close				挂断：close
+
+
+
+补充：
+	端口号port（unsigned short）：系统为每个使用的程序一个端口。传输层。
+	套接信息=ip+port   结构存着
+		struct socketaddr_in//ipv4用的
+		{
+			byte sin_family;
+			struct in_addr sin_addr;
+			unsigned short sin_port;
+		}
+
+
+
+
+
+
+
+
+	
+		
+
+
+
+
+
+
+
